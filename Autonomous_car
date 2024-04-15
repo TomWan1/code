@@ -1,0 +1,360 @@
+//selector read
+unsigned char SelectorPosition() 
+{ 
+  return PINC & 0xf;
+} 
+
+//rgb led
+void initRGB(){
+  DDRB |= 0xe0;
+}
+
+void rgbSet(int r,int g,int b){
+  unsigned char t = 0xe0;
+  if(r){
+    t &= ~(1<<5);
+  }
+
+  if (g){
+    t &= ~(1<<6);
+  }
+
+  if (b){
+    t &= ~(1<<7);
+  }
+
+  PORTB = r;
+}
+
+//led0-led8
+void initLeds(){
+  DDRL |=  0xf7;
+  DDRG |= (1<<3);
+}
+
+void ledOn(int i){
+  if(i != 3){
+    PORTL &= ~(1<<i);
+  } else {
+    PORTG &= ~(1<<i);
+  }
+}
+
+void ledOff(int i){
+  if(i != 3){
+    PORTL |= (1<<i);
+  } else {
+    PORTG |= (1<<i);
+  }
+}
+
+//ground sensor 0 - 3
+void initGroundLeds(){
+  DDRJ = DDRJ | 0xf;
+}
+
+void groundLEDon(int i){
+  PORTJ = PORTJ & ~(1 << i);
+}
+
+
+void groundLEDoff(int i){
+  PORTJ = PORTJ | (1 << i);
+}
+
+int ground[4];
+int activeGroundSensor(int i){
+  groundLEDon(i);
+  delay(10);
+
+  int r = analogRead(i+8);
+
+  groundLEDoff(i);
+
+  return r;
+
+}
+
+void readGroundSensors(){
+  for(int i = 0;i < 4;i++){
+    //light[i] = analogRead(i);
+    ground[i] = activeGroundSensor(i);
+     if (ground[i]>960) {
+    ground[i]=1;
+    }
+    else {
+    ground[i]=0;
+    }
+  }
+}
+void dispGroundSensors(){
+  //Serial.print("ground sensors: ");
+  for(int i = 0;i < 4;i++){
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(ground[i]);
+    Serial.print("\t");
+  }
+
+  Serial.println("");
+}
+
+//light sensors 0 - 8
+int light[8];
+int lightLeds[8] = {
+  22,23,24,25,26,27,28,29
+};
+
+void initLightLeds(){
+  for(int i = 0;i < 8;i++){
+    pinMode(lightLeds[i], OUTPUT);
+  }
+}
+
+void switchLightLedOn(int i){
+  digitalWrite(lightLeds[i], HIGH);
+}
+
+void switchLightLedOff(int i){
+  digitalWrite(lightLeds[i], LOW);
+}
+
+int activeLightSensor(int i){
+  switchLightLedOn(i);
+  delay(10);
+
+  int r = analogRead(i);
+
+  switchLightLedOff(i);
+
+  return r;
+
+}
+
+
+
+
+void dispLightSensors(){
+  Serial.print("light sensors: ");
+  for(int i = 0;i < 8;i++){
+    Serial.print(i);
+    Serial.print(":");
+    Serial.print(light[i]);
+    Serial.print("\t");
+  }
+
+  Serial.println("");
+}
+
+//motors: left, right
+int left_pwm = 6;
+int left_dir = 7;
+int right_pwm = 5;
+int right_dir = 2;
+
+void initMotors(){
+  pinMode(left_pwm, OUTPUT);
+  pinMode(left_dir, OUTPUT);
+  pinMode(right_pwm, OUTPUT);
+  pinMode(right_dir, OUTPUT);
+
+}
+
+void leftMotorForward(float duty) // duty : 0 -100
+{
+  int r = map(int(duty),0,100,0,255);
+
+  analogWrite(left_pwm, r);
+  digitalWrite(left_dir, LOW);
+}
+
+void leftMotorBackward(float duty) // duty : 0 -100
+{
+  int r = map(int(duty),0,100,0,255);
+
+  digitalWrite(left_pwm, LOW);
+  analogWrite(left_dir, r);
+}
+
+void leftMotorStop(){
+  digitalWrite(left_pwm, HIGH);
+  digitalWrite(left_dir, HIGH);
+}
+
+void rightMotorForward(float duty) // duty : 0 -100
+{
+  int r = map(int(duty),0,100,0,255);
+
+  analogWrite(right_pwm, r);
+  digitalWrite(right_dir, LOW);
+}
+
+void rightMotorBackward(float duty) // duty : 0 -100
+{
+  int r = map(int(duty),0,100,0,255);
+
+  digitalWrite(right_pwm, LOW);
+  analogWrite(right_dir, r);
+}
+
+void rightMotorStop(){
+  digitalWrite(right_pwm, HIGH);
+  digitalWrite(right_dir, HIGH);
+}
+
+void forward(float duty){
+  leftMotorForward(duty*0.97);
+  rightMotorForward(duty);
+}
+
+void stop(){
+  leftMotorStop();
+  rightMotorStop();
+}
+
+void setup() {
+  // put your setup code here, to run once:
+  initLightLeds();
+  initGroundLeds();
+  initLeds();
+  initRGB();
+
+  initMotors();
+
+  Serial.begin(115200);
+}
+void turnright(float duty_c){
+rightMotorForward(duty_c*1.25);
+leftMotorBackward(duty_c*0.5);
+}
+void turnleft(float duty_c){
+leftMotorForward(duty_c*1.25);
+rightMotorBackward(duty_c*0.5);
+}
+void track(float duty){
+  readGroundSensors();
+
+  if (ground[0]==0 && ground[1]==1 && ground[2]==0 && ground[3]==0) {
+      turnright(duty);
+    }
+
+  else if (ground[0]==0 && ground[1]==0 && ground[2]==1 && ground[3]==0) {
+      turnleft(duty);
+    }
+
+  else if (ground[0]==0 && ground[1]==0 && ground[2]==0 && ground[3]==1) {
+      turnleft(duty*1.3);
+    }
+
+  else if (ground[0]==1 && ground[1]==0 && ground[2]==0 && ground[3]==0) {
+      turnright(duty*1.3);
+    }
+
+  else if (ground[0]==1 && ground[1]==1 && ground[2]==0 && ground[3]==0) {
+      turnright(duty*1.25);
+    }
+
+  else if (ground[0]==0 && ground[1]==0 && ground[2]==1 && ground[3]==1) {
+      turnleft(duty*1.25);
+    } 
+
+  else{
+    forward(duty*1.3);
+   
+  }
+}
+void turn_around(float speed){
+
+  rightMotorForward(speed*1.4);
+  leftMotorBackward(speed*1.4);
+}
+void turn_aroundx(float speed){
+
+  rightMotorForward(speed*2);
+  leftMotorBackward(speed*2);
+}
+void back(float speed){
+  rightMotorBackward(speed);
+  leftMotorBackward(speed);
+}
+void wall(float speed){
+
+  readGroundSensors();
+  forward(speed);
+  if(ground[1]==1 && ground[2]==1)
+  {
+    stop();
+    delay(1);
+    back(speed);
+    delay(25);
+    turn_around(speed*0.8);
+  }
+  else{
+  for(int i=0;i<4;i++){
+    if(ground[i]==1){
+      //stop();
+      //delay(5);
+      stop();
+      delay(1);
+      back(speed);
+      delay(25);
+      turn_around(speed);
+      delay(10);
+    }
+  }
+  }
+}
+void readLightSensors(){
+  for(int i = 0;i < 8;i++){
+    //light[i] = analogRead(i);
+    light[i] = activeLightSensor(i);
+    if(light[i]<700){
+      light[i]=1;
+    }
+    else{
+      light[i]=0;
+    }
+  }
+}
+void avoid(float speed){
+  readLightSensors();
+  for(int i=0; i<3; i++){
+    if(light[i]==1){
+      stop();
+      turn_aroundx(speed);
+    }
+  }
+  
+ for(int i=6; i<8; i++){
+    if(light[i]==1){
+      stop();
+      turn_aroundx(speed);
+    }  
+}
+  }
+void loop() {
+  // put your main code here, to run repeatedly:
+
+  
+  
+  //track(7.5);
+  dispLightSensors();
+  wall(6.5);
+  avoid(6.5);
+  delay(5);
+  //stop();
+  //delay(1);
+
+  
+  return;
+
+  if(ground[0] > 900){
+    ledOn(0);
+  } else {
+    ledOff(0);
+  }
+
+
+  delay(500);
+
+}
